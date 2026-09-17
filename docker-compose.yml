@@ -1,0 +1,253 @@
+services:
+
+  # ---------------- Ingestion ----------------
+  # Official Apache Kafka image (KRaft mode, no ZooKeeper). Bitnami removed
+  # their free-tier rolling tags in 2025, so we use the upstream image the
+  # Kafka project itself publishes instead.
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: controller,broker
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    ports:
+      - "9092:9092"
+    # No named volume: Kafka's own topic log is not the pipeline's durable
+    # record (Postgres + the Parquet archive are, and both persist via
+    # their own volumes) - keeping this ephemeral avoids a non-root-user
+    # permission mismatch on a freshly-created bind/named volume path.
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  kafka-init:
+    image: apache/kafka:3.7.0
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: >
+      /bin/bash -c "
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists
+      --topic ${KAFKA_TOPIC_VITALS:-vitals-stream} --partitions 3 --replication-factor 1
+      && echo 'topic ready'"
+
+  # ---------------- Storage ----------------
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./common/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hospital}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------- Simulated sources ----------------
+  vitals-producer:
+    build:
+      context: .
+      dockerfile: sources/Dockerfile
+    container_name: vitals-producer
+    command: ["python", "sources/vitals_producer.py"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS:-vitals-stream}
+      NUM_PATIENTS: ${NUM_PATIENTS:-12}
+      VITALS_INTERVAL_SECONDS: ${VITALS_INTERVAL_SECONDS:-3}
+      ABNORMAL_SPIKE_PROBABILITY: ${ABNORMAL_SPIKE_PROBABILITY:-0.06}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+      PUSHGATEWAY_URL: http://pushgateway:9091
+
+  lab-source:
+    build:
+      context: .
+      dockerfile: sources/Dockerfile
+    container_name: lab-source
+    command: ["python", "sources/lab_batch_source.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SIMULATED_DAY_SECONDS: ${SIMULATED_DAY_SECONDS:-300}
+      NUM_PATIENTS: ${NUM_PATIENTS:-12}
+      LAB_DROP_DIR: /data/lab_drops
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+      PUSHGATEWAY_URL: http://pushgateway:9091
+    volumes:
+      - ./data/lab_drops:/data/lab_drops
+
+  # ---------------- Stream processing (speed layer) ----------------
+  spark-streaming:
+    build:
+      context: .
+      dockerfile: streaming/Dockerfile
+    container_name: spark-streaming
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC_VITALS: ${KAFKA_TOPIC_VITALS:-vitals-stream}
+      PARQUET_LAKE_PATH: /data/parquet_lake/vitals
+      SPARK_CHECKPOINT_ROOT: /data/spark_checkpoints
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+      PUSHGATEWAY_URL: http://pushgateway:9091
+    volumes:
+      - ./data/parquet_lake:/data/parquet_lake
+      - ./data/spark_checkpoints:/data/spark_checkpoints
+      - spark_ivy_cache:/home/spark/.ivy2
+
+  # ---------------- Orchestration (batch layer) ----------------
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    container_name: airflow
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SIMULATED_DAY_SECONDS: ${SIMULATED_DAY_SECONDS:-300}
+      LAB_DROP_DIR: /data/lab_drops
+      PARQUET_LAKE_PATH: /data/parquet_lake/vitals
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+    volumes:
+      - ./data/lab_drops:/data/lab_drops
+      - ./data/parquet_lake:/data/parquet_lake
+    # Note: Airflow's own SQLite metadata (DAG run history) is NOT
+    # persisted outside the container on purpose — mounting a named volume
+    # over /opt/airflow would shadow the DAG/common code baked into the
+    # image on every rebuild. Metadata survives `stop`/`start` but resets
+    # on `down` + recreate; our own idempotency (find_unprocessed_batch,
+    # ON CONFLICT upserts) lives in the app Postgres tables instead, so
+    # this has no effect on correctness of results.
+
+  # ---------------- Serving layer ----------------
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      SIMULATED_DAY_SECONDS: ${SIMULATED_DAY_SECONDS:-300}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8501:8501"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-hospital}
+      POSTGRES_USER: ${POSTGRES_USER:-hospital}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+
+  # ---------------- Observability ----------------
+  pushgateway:
+    image: prom/pushgateway:v1.9.0
+    container_name: pushgateway
+    ports:
+      - "9091:9091"
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./observability/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  spark_ivy_cache:
+  prometheus_data:
+  grafana_data:

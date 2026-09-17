@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # API exposes /metrics natively (request counts/latencies + any custom
+  # metrics), so Prometheus scrapes it directly.
+  - job_name: api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["api:8000"]
+
+  # Producer / Spark streaming / lab source / Airflow are short-lived or
+  # batch in nature, so they push to Pushgateway instead of being scraped.
+  # honor_labels keeps the job/instance labels set by the pusher.
+  - job_name: pushgateway
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]

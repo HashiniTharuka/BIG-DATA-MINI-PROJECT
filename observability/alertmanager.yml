@@ -1,0 +1,13 @@
+# Minimal Alertmanager config for the demo: alerts are visible in the
+# Alertmanager UI (http://localhost:9093) and logged by the "null" receiver.
+# Swap the receiver for email/Slack/webhook in a real deployment.
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 15m
+
+receivers:
+  - name: default
+    # webhook_configs can be added here to forward to Slack/PagerDuty/etc.

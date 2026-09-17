@@ -1,0 +1,5 @@
+# kafka-python-ng: maintained fork of kafka-python (same `import kafka` API)
+# with fixed broker-version negotiation against modern Kafka (3.x / KRaft).
+kafka-python-ng==2.2.2
+psycopg2-binary==2.9.9
+prometheus-client==0.20.0

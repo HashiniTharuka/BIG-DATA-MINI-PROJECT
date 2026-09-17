@@ -1,0 +1,50 @@
+# Alert thresholds below assume the default SIMULATED_DAY_SECONDS=300 in
+# .env.example. If you change that value, update BatchJobOverdue's
+# threshold (kept at ~3x the simulated day length) to match.
+groups:
+  - name: hospital-pipeline-alerts
+    rules:
+      - alert: VitalsIngestionStalled
+        expr: time() - vitals_producer_last_tick_timestamp > 120
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No vitals ingested from the bedside monitor simulator in over 2 minutes"
+          description: "vitals_producer heartbeat is stale ({{ $value | humanizeDuration }} since last tick). Patient monitoring may be blind."
+
+      - alert: SparkStreamingStalled
+        expr: time() - spark_realtime_last_batch_timestamp > 120
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Spark Structured Streaming speed layer has not produced a window in over 2 minutes"
+          description: "The speed layer (vitals_realtime aggregation) appears stuck or crashed."
+
+      - alert: HighAbnormalVitalsRate
+        expr: rate(spark_alerts_written_total[5m]) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Abnormal vitals alert rate is unusually high"
+          description: "More than 0.5 threshold-breach alerts/sec sustained over 5 minutes across the ward — investigate for a systemic issue vs. isolated patient events."
+
+      - alert: BatchJobOverdue
+        expr: time() - lab_batch_last_drop_timestamp > 900
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Daily lab batch file has not been dropped on schedule"
+          description: "Expected a new lab_results file roughly every simulated day; none seen for 15+ minutes. The daily risk report will go stale."
+
+      - alert: ErrorRateElevated
+        expr: increase(vitals_producer_errors_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Vitals producer is failing to publish events to Kafka"
+          description: "More than 5 send errors in the last 5 minutes — check Kafka broker connectivity."

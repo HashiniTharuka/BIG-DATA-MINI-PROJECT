@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+data/lab_drops/*
+!data/lab_drops/.gitkeep
+data/parquet_lake/*
+!data/parquet_lake/.gitkeep
+data/postgres/
+data/spark_checkpoints/*
+!data/spark_checkpoints/.gitkeep
+airflow/logs/
+airflow/airflow.db
+.idea/
+.vscode/
+*.log

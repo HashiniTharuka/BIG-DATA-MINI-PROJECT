@@ -1,0 +1,64 @@
+{
+  "title": "Hospital Pipeline Observability",
+  "uid": "hospital-pipeline",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Vitals Ingestion Rate (events/sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(vitals_producer_events_sent_total[2m])", "legendFormat": "events/sec" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Speed Layer Processing Lag (sec since last window)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "time() - spark_realtime_last_batch_timestamp", "legendFormat": "lag (s)" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Abnormal Vitals Alerts / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(spark_alerts_written_total[5m])", "legendFormat": "alerts/sec" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Time Since Last Daily Lab Batch Drop (sec)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "time() - lab_batch_last_drop_timestamp", "legendFormat": "age (s)" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "API Request Rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total[2m])) by (handler)", "legendFormat": "{{handler}}" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Producer Send Errors (5m)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "increase(vitals_producer_errors_total[5m])", "legendFormat": "errors" }
+      ]
+    }
+  ]
+}
