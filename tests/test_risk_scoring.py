@@ -61,3 +61,74 @@ def test_risk_score_is_clamped_to_100():
     risk = compute_risk(trend, lab_flags=["troponin", "potassium", "creatinine", "wbc_count"])
     assert risk.risk_score <= 100.0
     assert risk.risk_category == "critical"
+
+
+def test_improving_trend_reduces_risk_score_compared_to_stable():
+    """The improving trend adjustment (-5) must produce a lower score than the same
+    trend data when labelled 'stable' (no adjustment). Uses direct DailyVitalsTrend
+    construction to make the comparison fully deterministic."""
+    from common.risk_scoring import DailyVitalsTrend
+    shared_kwargs = dict(
+        reading_count=20, abnormal_ratio=0.3,
+        max_heart_rate=90, min_spo2=97, max_systolic_bp=120,
+    )
+    score_improving = compute_risk(
+        DailyVitalsTrend(**shared_kwargs, vitals_trend="improving"), lab_flags=[]
+    ).risk_score
+    score_stable = compute_risk(
+        DailyVitalsTrend(**shared_kwargs, vitals_trend="stable"), lab_flags=[]
+    ).risk_score
+    # improving = stable - 5; stable has no adjustment
+    assert score_improving < score_stable
+    assert abs(score_stable - score_improving - 5.0) < 0.01
+
+
+def test_improving_trend_adjustment_is_minus_5():
+    """Quantitative check: compute_risk with an improving trend must produce a score
+    exactly 5 points lower than the same trend object with the worsening penalty swapped
+    out, within float tolerance."""
+    from common.risk_scoring import DailyVitalsTrend
+    base_trend = DailyVitalsTrend(
+        reading_count=20, abnormal_ratio=0.2,
+        max_heart_rate=90, min_spo2=97, max_systolic_bp=120,
+        vitals_trend="stable",
+    )
+    improving_trend = DailyVitalsTrend(
+        reading_count=20, abnormal_ratio=0.2,
+        max_heart_rate=90, min_spo2=97, max_systolic_bp=120,
+        vitals_trend="improving",
+    )
+    score_stable = compute_risk(base_trend, lab_flags=[]).risk_score
+    score_improving = compute_risk(improving_trend, lab_flags=[]).risk_score
+    assert abs(score_stable - score_improving - 5.0) < 0.01
+
+
+def test_risk_score_floor_is_zero():
+    """An extremely healthy patient with improving trend and no lab flags must not
+    produce a negative score (the max(0, score) clamp must be in effect)."""
+    from common.risk_scoring import DailyVitalsTrend
+    healthy_trend = DailyVitalsTrend(
+        reading_count=100, abnormal_ratio=0.0,
+        max_heart_rate=75, min_spo2=99, max_systolic_bp=110,
+        vitals_trend="improving",  # -5 adjustment applied
+    )
+    risk = compute_risk(healthy_trend, lab_flags=[])
+    assert risk.risk_score >= 0.0
+    assert risk.risk_category == "low"
+
+
+def test_worsening_trend_scores_higher_than_stable_trend():
+    """Worsening trend adds +10 to score; stable adds 0. All else equal, worsening
+    must produce a strictly higher score."""
+    from common.risk_scoring import DailyVitalsTrend
+    shared_kwargs = dict(
+        reading_count=20, abnormal_ratio=0.3,
+        max_heart_rate=90, min_spo2=97, max_systolic_bp=120,
+    )
+    score_worsening = compute_risk(
+        DailyVitalsTrend(**shared_kwargs, vitals_trend="worsening"), lab_flags=[]
+    ).risk_score
+    score_stable = compute_risk(
+        DailyVitalsTrend(**shared_kwargs, vitals_trend="stable"), lab_flags=[]
+    ).risk_score
+    assert score_worsening == score_stable + 10.0
