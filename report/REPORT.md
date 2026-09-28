@@ -10,7 +10,8 @@
 > sections written out in full since those don't depend on your specific run of the
 > system. Sections marked `[TODO: screenshot]` / `[TODO: fill in]` need your actual
 > output once the pipeline has been running for a while — take screenshots from the
-> Streamlit dashboard, Grafana, Airflow UI, and Alertmanager as described inline.
+> HTML dashboard (`http://localhost:8502`), Grafana, Airflow UI, and Alertmanager as
+> described inline.
 > Convert this to PDF at the end (Pandoc, or paste into Word/Google Docs and export).
 
 ---
@@ -172,8 +173,8 @@ flowchart LR
     end
 
     subgraph Serving
-        API[FastAPI]
-        DASH[Streamlit dashboard]
+        API["FastAPI :8000\n(CORS enabled)"]
+        DASH["HTML Dashboard :8502\n(static, browser-native)"]
     end
 
     V --> K --> S1
@@ -188,9 +189,7 @@ flowchart LR
     RT --> API
     AL --> API
     DR --> API
-    RT --> DASH
-    AL --> DASH
-    DR --> DASH
+    API --> DASH
 ```
 
 The Parquet archive is the architectural pivot: it is the *immutable raw log* that the
@@ -209,7 +208,7 @@ prescribes.
 | Stream processing | **Apache Spark Structured Streaming** | Native Kafka source connector, built-in watermarking for late data, and a DataFrame API that makes windowed aggregation + `foreachBatch` JDBC upserts straightforward. Chosen over Storm because our transformations (windowed averages, threshold classification, Parquet archival) are naturally expressed as DataFrame operations, and because the same Spark skill set is reused for structured batch-style analysis if the batch layer needs to scale up later. |
 | Orchestration | **Apache Airflow** | The batch layer is a multi-step, dependency-ordered, retryable pipeline (detect file → load → recompute → join → score → write) — exactly Airflow's design target. Its scheduler naturally expresses "once per simulated day," its UI gives visible DAG run history for the demo/viva, and its retry semantics give us resilience for free if a step transiently fails (e.g., Postgres briefly unavailable). |
 | Storage/Sink | **PostgreSQL** (serving tables) + **Parquet on a local volume** (raw archive, standing in for HDFS/S3) | Postgres: the serving-layer outputs (`vitals_realtime`, `alerts`, `lab_results`, `daily_risk_report`) are all small, structured, query-by-key workloads — a perfect fit for a relational store queried by the API/dashboard, and `ON CONFLICT` upserts give us idempotent writes for free. Parquet: columnar, splittable, and the standard format for a batch-recompute data lake; a local volume substitutes for HDFS/S3 at this scale without changing the access pattern (`pandas.read_parquet` today, `spark.read.parquet` unchanged if migrated to real HDFS/S3). |
-| Serving | **FastAPI** + **Streamlit** | FastAPI matches the brief's suggested "API endpoint" deliverable exactly, gives us `/metrics` for free via `prometheus-fastapi-instrumentator`, and is trivial to extend. Streamlit gives a fast, Python-native, live-refreshing dashboard for the human-facing consolidated report without a separate frontend build step — appropriate for a 2-week project. |
+| Serving | **FastAPI** + **Standalone HTML Dashboard** | FastAPI matches the brief's suggested "API endpoint" deliverable exactly, gives us `/metrics` for free via `prometheus-fastapi-instrumentator`, and is trivial to extend. `CORSMiddleware` (`allow_origins=["*"]`) is applied so any browser-origin can call the API. The human-facing dashboard is a **single-file HTML/CSS/JS** application (`dashboard/index.html`) served on port 8502 via Python's built-in HTTP server — it fetches all data directly from the FastAPI endpoints, requires no Python runtime in the browser, auto-refreshes every 15 seconds, and displays ward vitals, real-time alerts, daily risk reports, and pipeline health in a premium dark-mode UI. |
 | Observability | **Prometheus + Pushgateway + Alertmanager + Grafana** | Industry-standard metrics stack. Pushgateway bridges the gap for our batch/short-lived components (producer loop, Spark micro-batches, Airflow tasks) that can't be scraped directly; the API is scraped natively since it's a long-running HTTP service. Alertmanager gives us real alert routing/grouping rather than ad hoc log-grepping. Grafana provides the visual dashboard the rubric explicitly rewards. |
 
 ---
@@ -296,26 +295,49 @@ Alertmanager, then `docker compose start vitals-producer` and screenshot it reso
 
 ## 6. Results
 
-`[TODO: screenshot]` Streamlit dashboard — live ward view with several patients, at
-least one in `warning`/`critical` status (wait for a spike or lower
-`ABNORMAL_SPIKE_PROBABILITY`'s denominator / just let it run — expected roughly every
-`1 / (NUM_PATIENTS × ABNORMAL_SPIKE_PROBABILITY / VITALS_INTERVAL_SECONDS)` seconds).
+### 6.1 HTML Dashboard — Ward Monitor
 
-`[TODO: screenshot]` Streamlit dashboard — daily risk report table for at least one
-`batch_date`, sorted by risk score, with the bar chart.
+`[TODO: screenshot]` HTML Dashboard (`http://localhost:8502`) — **Ward Monitor** panel
+showing the stat bar (active patients, normal / warning / critical counts, 15-minute
+alert count) and the patient card grid with at least one patient in `warning` or
+`critical` status. Each card shows the coloured left-border status strip, live
+aggregated vitals (heart rate, SpO₂, systolic BP, temperature) with threshold
+colouring, and the abnormal-reading dot bar at the bottom.
+
+### 6.2 HTML Dashboard — Real-Time Alerts
+
+`[TODO: screenshot]` HTML Dashboard — **Alerts** panel (last 30 minutes) showing the
+alert table with severity chips and pulsing red rows for `critical` alerts. Confirm
+at least one `critical` and one `warning` alert are visible with their metric, value,
+reason, and timestamp.
+
+### 6.3 HTML Dashboard — Daily Risk Reports
+
+`[TODO: screenshot]` HTML Dashboard — **Risk Reports** panel showing per-patient risk
+cards for at least one `batch_date`, with the animated score bar, risk level chip,
+abnormal ratio, min SpO₂, max HR, and vitals trend populated after the first
+Airflow DAG run.
+
+### 6.4 FastAPI — Interactive Docs
 
 `[TODO: screenshot]` `GET /ward/status` and `GET /patient/{id}/risk` responses from
 `http://localhost:8000/docs` (Swagger "Try it out").
 
+### 6.5 Airflow — DAG Run
+
 `[TODO: screenshot]` Airflow UI — `daily_risk_report_dag` graph view and at least one
 successful run's task log for `compute_and_write_risk_report`.
+
+### 6.6 Grafana — Metrics Dashboard
 
 `[TODO: screenshot]` Grafana dashboard with populated panels (let the stack run for a
 few minutes first so the time series have data).
 
+### 6.7 Narrative
+
 `[TODO: fill in]` One or two paragraphs narrating what the above screenshots show in
 your specific run — e.g. "Patient P004 was flagged `critical` at 14:32 after SpO2 fell
-to 87%; the alert appears in the dashboard's alert feed at 14:32:xx and in the
+to 87%; the alert appears in the HTML dashboard's Alerts panel at 14:32:xx and in the
 `alerts` table. The following day's risk report shows P004 at risk_score=78
 (`critical`), driven by a 0.34 abnormal-reading ratio plus an out-of-range troponin
 result."
@@ -352,6 +374,11 @@ result."
   it automatically).
 - **Alertmanager receiver.** We use a null/log receiver for demo purposes; production
   would route to PagerDuty/email/Slack per severity.
+- **Dashboard serving.** The HTML dashboard is served via Python's `http.server` module
+  on port 8502 — adequate for demo and local evaluation, but not production-grade. A
+  production deployment would serve the static files from the same Nginx reverse-proxy
+  as the API, eliminating the CORS complexity entirely (same-origin requests require no
+  `Access-Control-Allow-Origin` headers).
 
 ---
 
@@ -367,6 +394,8 @@ result."
   `daily_risk_report` — we do not model partial/late-arriving lab results within a day.
 - No authentication/authorization on the API or dashboard — out of scope for this
   project, would be required before any real clinical use.
+- The HTML dashboard uses `allow_origins=["*"]` CORS policy on the API for simplicity;
+  production would restrict this to specific trusted origins.
 
 ---
 

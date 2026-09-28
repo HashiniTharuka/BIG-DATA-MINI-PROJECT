@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Hospital Vitals Monitoring</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root{--bg:#0b0f1a;--sf:#121929;--sf2:#1a2336;--bd:#1e2d45;--bd2:#243248;--ac:#3b82f6;--ok:#22c55e;--wn:#f59e0b;--cr:#ef4444;--mu:#64748b;--ink:#e2e8f0;--ink2:#94a3b8}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+    ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:4px}
+    .bar{position:sticky;top:0;z-index:100;background:rgba(11,15,26,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--bd);padding:0 2rem;height:60px;display:flex;align-items:center;justify-content:space-between}
+    .brand{display:flex;align-items:center;gap:.7rem}
+    .brand svg{width:28px;height:28px}
+    .brand h1{font-size:1rem;font-weight:700;letter-spacing:-.02em}
+    .brand p{font-size:.7rem;color:var(--mu);margin-top:.05rem}
+    .br{display:flex;align-items:center;gap:1rem}
+    .live-badge{font-size:.68rem;font-weight:600;padding:3px 10px;border-radius:999px;background:rgba(34,197,94,.15);color:var(--ok);border:1px solid rgba(34,197,94,.3)}
+    #ind{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);transition:opacity .2s}
+    #ind.dim{opacity:.2}
+    #lu{font-size:.7rem;color:var(--mu)}
+    .layout{display:grid;grid-template-columns:230px 1fr;min-height:calc(100vh - 60px)}
+    .side{background:var(--sf);border-right:1px solid var(--bd);padding:1.2rem .8rem;display:flex;flex-direction:column;gap:.25rem}
+    .sh{font-size:.6rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.08em;padding:.85rem .7rem .3rem}
+    .nb{width:100%;background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;border-radius:8px;color:var(--ink2);font-size:.85rem;font-family:inherit;font-weight:500;text-align:left;transition:all .15s}
+    .nb:hover{background:var(--sf2);color:var(--ink)}
+    .nb.active{background:rgba(59,130,246,.15);color:var(--ac)}
+    .nb .ic{font-size:1rem;width:1.2rem;text-align:center}
+    .sth{padding:.4rem .7rem}
+    .str{display:flex;align-items:center;justify-content:space-between;padding:.3rem .4rem;border-radius:6px;font-size:.72rem;margin-bottom:.2rem}
+    .sdot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+    .ok-r .sdot{background:var(--ok);box-shadow:0 0 4px var(--ok)}.ok-r .sst{color:var(--ok)}
+    .err-r .sdot{background:var(--cr)}.err-r .sst{color:var(--cr)}
+    .snm{color:var(--ink2)}.sst{font-weight:600;font-size:.66rem}
+    .main{padding:2rem;overflow:auto}
+    .pnl{display:none}.pnl.active{display:flex;flex-direction:column;gap:0}
+    .pt{font-size:1.3rem;font-weight:700;margin-bottom:1.4rem;display:flex;align-items:center;gap:.5rem}
+    .sr{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:.9rem;margin-bottom:1.4rem;position:relative;z-index:1}
+    .sc{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:1rem 1.1rem;position:relative;overflow:hidden;isolation:isolate;transition:transform .15s,border-color .2s;cursor:default}
+    .sc:hover{transform:translateY(-2px);border-color:var(--bd2)}
+    .sc::before{content:"";position:absolute;inset:0;opacity:.06;border-radius:14px}
+    .sc.ok::before{background:var(--ok)}.sc.wn::before{background:var(--wn)}.sc.cr::before{background:var(--cr)}.sc.bl::before{background:var(--ac)}
+    .sl{font-size:.68rem;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.4rem}
+    .sv{font-size:2rem;font-weight:700;line-height:1}
+    .ss{font-size:.7rem;color:var(--mu);margin-top:.3rem}
+    .sc.ok .sv{color:var(--ok)}.sc.wn .sv{color:var(--wn)}.sc.cr .sv{color:var(--cr)}.sc.bl .sv{color:var(--ac)}
+    .pg{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.9rem;margin-bottom:1.4rem;position:relative;z-index:0}
+    .pc{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:1rem 1.1rem;transition:all .2s;position:relative;overflow:hidden;isolation:isolate}
+    .pc::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:4px 0 0 4px}
+    .pc.normal::after{background:var(--ok)}.pc.warning::after{background:var(--wn)}.pc.critical::after{background:var(--cr)}
+    .pc:hover{transform:translateY(-2px);border-color:var(--bd2)}
+    .pch{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.8rem}
+    .pid{font-size:.98rem;font-weight:700}.ptm{font-size:.66rem;color:var(--mu);margin-top:.15rem}
+    .chip{font-size:.62rem;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:uppercase}
+    .chip.normal{background:rgba(34,197,94,.15);color:var(--ok)}.chip.warning{background:rgba(245,158,11,.15);color:var(--wn)}.chip.critical{background:rgba(239,68,68,.15);color:var(--cr)}
+    .vg{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
+    .vt{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:.45rem .6rem}
+    .vl{font-size:.6rem;color:var(--mu);font-weight:600;text-transform:uppercase;margin-bottom:.15rem}
+    .vv{font-size:.93rem;font-weight:700}.vu{font-size:.6rem;color:var(--mu);font-weight:400}
+    .vv.wn{color:var(--wn)}.vv.cr{color:var(--cr)}
+    .pf{display:flex;justify-content:space-between;align-items:center;margin-top:.7rem;font-size:.64rem;color:var(--mu)}
+    .rb{display:flex;gap:3px}.rd{width:6px;height:6px;border-radius:50%;background:var(--bd2)}.rd.ab{background:var(--cr)}
+    .card{background:var(--sf);border:1px solid var(--bd);border-radius:14px;overflow:hidden;margin-bottom:1.4rem}
+    .ch{padding:.9rem 1.3rem;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;font-size:.88rem;font-weight:600}
+    .chr{font-size:.72rem;color:var(--mu);font-weight:400}
+    table{width:100%;border-collapse:collapse;font-size:.78rem}
+    thead th{padding:.6rem 1rem;background:var(--sf2);font-size:.65rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--mu);text-align:left;border-bottom:1px solid var(--bd)}
+    tbody tr{border-bottom:1px solid var(--bd);transition:background .1s}
+    tbody tr:hover{background:var(--sf2)}
+    tbody td{padding:.6rem 1rem}
+    tbody tr:last-child{border-bottom:none}
+    .bc{font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase}
+    .bc.warning{background:rgba(245,158,11,.15);color:var(--wn)}.bc.critical{background:rgba(239,68,68,.15);color:var(--cr)}
+    .rg{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.9rem;margin-bottom:1.4rem}
+    .rk{background:var(--sf);border:1px solid var(--bd);border-radius:14px;padding:1rem 1.1rem;transition:all .2s}
+    .rk:hover{transform:translateY(-2px);border-color:var(--bd2)}
+    .rkh{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.8rem}
+    .rkid{font-size:.98rem;font-weight:700}.rkd{font-size:.66rem;color:var(--mu)}
+    .sbr{background:var(--sf2);border-radius:999px;height:7px;overflow:hidden;margin:.5rem 0 .35rem}
+    .sf3{height:100%;border-radius:999px;transition:width .5s cubic-bezier(.4,0,.2,1)}
+    .sf3.low{background:var(--ok)}.sf3.medium{background:var(--wn)}.sf3.high{background:#f97316}.sf3.critical{background:var(--cr)}
+    .rks{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-top:.6rem}
+    .rki{background:var(--sf2);border-radius:7px;padding:.35rem .55rem}
+    .rkil{font-size:.58rem;color:var(--mu);font-weight:600;text-transform:uppercase}
+    .rkiv{font-size:.82rem;font-weight:700;margin-top:.1rem}
+    .empty{text-align:center;padding:3rem;color:var(--mu)}
+    .empty .ei{font-size:2.5rem;margin-bottom:.7rem}.empty p{font-size:.82rem}
+    .spin{width:26px;height:26px;border:3px solid var(--bd);border-top-color:var(--ac);border-radius:50%;animation:spin .7s linear infinite;margin:3rem auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .eb{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:.8rem 1rem;color:var(--cr);font-size:.78rem;margin-bottom:1rem}
+    @keyframes cp{0%,100%{background:transparent}50%{background:rgba(239,68,68,.05)}}
+    tr.cr-row{animation:cp 2s ease infinite}
+    @media(max-width:700px){.layout{grid-template-columns:1fr}.side{display:none}}
+  </style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">
+    <svg viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="7" fill="#3b82f6" opacity=".15"/><path d="M5 14h4l2-5 4 10 2-7 2 3 2-1h2" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div><h1>HospitalVitals</h1><p>Lambda Architecture Pipeline</p></div>
+  </div>
+  <div class="br">
+    <span class="live-badge">&#9679; Live</span>
+    <div id="ind"></div>
+    <span id="lu">-</span>
+  </div>
+</header>
+<div class="layout">
+  <aside class="side">
+    <div class="sh">Navigation</div>
+    <button class="nb active" onclick="show('ward')" id="nav-ward"><span class="ic">&#127973;</span> Ward Status</button>
+    <button class="nb" onclick="show('alerts')" id="nav-alerts"><span class="ic">&#128276;</span> Alerts</button>
+    <button class="nb" onclick="show('risk')" id="nav-risk"><span class="ic">&#128202;</span> Risk Reports</button>
+    <button class="nb" onclick="show('health')" id="nav-health"><span class="ic">&#129658;</span> Pipeline Health</button>
+    <div class="sh" style="margin-top:.8rem">Pipeline Stages</div>
+    <div class="sth" id="sbh"><div class="str err-r"><div style="display:flex;align-items:center;gap:.45rem"><div class="sdot"></div><span class="snm" style="font-size:.7rem">Loading...</span></div></div></div>
+    <div style="flex:1"></div>
+    <div style="padding:.7rem;font-size:.63rem;color:var(--mu);text-align:center;border-top:1px solid var(--bd)">
+      Auto-refresh <strong style="color:var(--ink2)">15s</strong> &bull;
+      <a href="http://localhost:8000/docs" target="_blank" style="color:var(--ac);text-decoration:none">API Docs</a>
+    </div>
+  </aside>
+  <main class="main">
+    <div id="p-ward" class="pnl active">
+      <div class="pt">&#127973; Ward Monitor</div>
+      <div class="sr" id="ws"></div>
+      <div class="pg" id="pg"><div class="spin"></div></div>
+    </div>
+    <div id="p-alerts" class="pnl">
+      <div class="pt">&#128276; Real-Time Alerts</div>
+      <div class="card">
+        <div class="ch">Recent Alerts <span class="chr" id="aw">Last 30 min</span></div>
+        <div id="at"><div class="spin"></div></div>
+      </div>
+    </div>
+    <div id="p-risk" class="pnl">
+      <div class="pt">&#128202; Daily Risk Reports</div>
+      <div class="rg" id="rg"><div class="spin"></div></div>
+    </div>
+    <div id="p-health" class="pnl">
+      <div class="pt">&#129658; Pipeline Health</div>
+      <div class="card">
+        <div class="ch">Stage Health Checks <span class="chr" id="hca">-</span></div>
+        <div id="ht"><div class="spin"></div></div>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+const API="http://localhost:8000",RM=15000;let ap="ward";
+const G=id=>document.getElementById(id);
+const fm=(n,d=1)=>n!=null?(+n).toFixed(d):"--";
+const ft=iso=>iso?new Date(iso).toLocaleTimeString():"--";
+const fd=iso=>iso?new Date(iso).toLocaleDateString():"--";
+function vc(m,v){const n=+v;
+  if(m==="heart_rate")return n<50||n>120?"cr":n<60||n>100?"wn":"";
+  if(m==="spo2")return n<90?"cr":n<95?"wn":"";
+  if(m==="systolic_bp")return n>180||n<80?"cr":n>140||n<90?"wn":"";
+  if(m==="temperature")return n>39.5||n<35?"cr":n>38||n<36?"wn":"";
+  return "";}
+function er(el,msg){el.innerHTML='<div class="eb">&#9888; '+msg+'</div>';}
+function show(n){ap=n;document.querySelectorAll(".pnl").forEach(p=>p.classList.remove("active"));document.querySelectorAll(".nb").forEach(b=>b.classList.remove("active"));G("p-"+n).classList.add("active");G("nav-"+n).classList.add("active");refresh();}
+async function lw(){try{
+  const d=await fetch(API+"/ward/status").then(r=>r.json());
+  const sb=d.status_breakdown||{};
+  G("ws").innerHTML=
+    '<div class="sc bl"><div class="sl">Patients</div><div class="sv">'+(d.active_patients||0)+'</div><div class="ss">On ward</div></div>'+
+    '<div class="sc ok"><div class="sl">Normal</div><div class="sv">'+(sb.normal||0)+'</div><div class="ss">Stable</div></div>'+
+    '<div class="sc wn"><div class="sl">Warning</div><div class="sv">'+(sb.warning||0)+'</div><div class="ss">Breached</div></div>'+
+    '<div class="sc cr"><div class="sl">Critical</div><div class="sv">'+(sb.critical||0)+'</div><div class="ss">Urgent</div></div>'+
+    '<div class="sc wn"><div class="sl">Alerts 15m</div><div class="sv">'+(d.recent_alert_count_15min||0)+'</div><div class="ss">Recent</div></div>';
+  const pts=d.patients||[];
+  if(!pts.length){G("pg").innerHTML='<div class="empty"><div class="ei">&#128564;</div><p>No patients yet. Stream starting...</p></div>';return;}
+  G("pg").innerHTML=pts.map(p=>{
+    const t=p.reading_count||0,a=p.abnormal_count||0,st=(p.status||"normal").toLowerCase();
+    const dots=Array.from({length:Math.min(t,12)},(_,i)=>'<div class="rd'+(i<a?" ab":"")+'"></div>').join("");
+    return '<div class="pc '+st+'">'+
+      '<div class="pch"><div><div class="pid">'+p.patient_id+'</div><div class="ptm">Updated '+ft(p.updated_at)+'</div></div>'+
+      '<div class="chip '+st+'">'+st+'</div></div>'+
+      '<div class="vg">'+
+        '<div class="vt"><div class="vl">Heart Rate</div><div class="vv '+vc("heart_rate",p.avg_heart_rate)+'">'+fm(p.avg_heart_rate,0)+' <span class="vu">bpm</span></div></div>'+
+        '<div class="vt"><div class="vl">SpO2</div><div class="vv '+vc("spo2",p.avg_spo2)+'">'+fm(p.avg_spo2,1)+' <span class="vu">%</span></div></div>'+
+        '<div class="vt"><div class="vl">Systolic BP</div><div class="vv '+vc("systolic_bp",p.avg_systolic_bp)+'">'+fm(p.avg_systolic_bp,0)+' <span class="vu">mmHg</span></div></div>'+
+        '<div class="vt"><div class="vl">Temperature</div><div class="vv '+vc("temperature",p.avg_temperature)+'">'+fm(p.avg_temperature,1)+' <span class="vu">C</span></div></div>'+
+      '</div>'+
+      '<div class="pf"><span>'+t+' rdg, '+a+' abn</span><div class="rb">'+dots+'</div></div>'+
+    '</div>';}).join("");
+}catch(e){er(G("pg"),"API unreachable: "+e.message);}}
+async function la(){try{
+  const d=await fetch(API+"/alerts/recent?minutes=30").then(r=>r.json());
+  G("aw").textContent="30 min - "+d.count+" alerts";
+  const a=d.alerts||[];
+  if(!a.length){G("at").innerHTML='<div class="empty"><div class="ei">&#9989;</div><p>No alerts in 30 minutes.</p></div>';return;}
+  G("at").innerHTML='<table><thead><tr><th>Severity</th><th>Patient</th><th>Metric</th><th>Value</th><th>Reason</th><th>Time</th></tr></thead><tbody>'+
+    a.map(x=>'<tr class="'+(x.severity==="critical"?"cr-row":"")+'"><td><span class="bc '+x.severity+'">'+x.severity+'</span></td><td><strong>'+x.patient_id+'</strong></td><td>'+x.metric+'</td><td>'+fm(x.value)+'</td><td style="color:var(--ink2);font-size:.73rem">'+(x.reason||"--")+'</td><td style="color:var(--mu)">'+ft(x.event_time)+'</td></tr>').join("")+
+  '</tbody></table>';
+}catch(e){er(G("at"),"API unreachable: "+e.message);}}
+async function lr(){try{
+  const w=await fetch(API+"/ward/status").then(r=>r.json());
+  const ids=(w.patients||[]).map(p=>p.patient_id);
+  if(!ids.length){G("rg").innerHTML='<div class="empty"><div class="ei">&#9203;</div><p>Risk reports appear after first Airflow run.</p></div>';return;}
+  const rs=await Promise.allSettled(ids.map(id=>fetch(API+"/patient/"+id+"/risk").then(r=>r.json())));
+  const cs=rs.filter(r=>r.status==="fulfilled"&&r.value.latest_risk_report).map(r=>{
+    const p=r.value,rpt=p.latest_risk_report,sc=rpt.risk_score||0,lv=rpt.risk_level||"low";
+    const co=lv==="critical"?"var(--cr)":lv==="high"?"#f97316":lv==="medium"?"var(--wn)":"var(--ok)";
+    return '<div class="rk"><div class="rkh"><div><div class="rkid">'+p.patient_id+'</div><div class="rkd">'+fd(rpt.batch_date)+'</div></div><span class="chip '+lv+'">'+lv+'</span></div>'+
+      '<div style="font-size:.67rem;color:var(--mu);margin-bottom:.2rem">Risk Score</div>'+
+      '<div style="font-size:1.5rem;font-weight:700;color:'+co+'">'+sc+'</div>'+
+      '<div class="sbr"><div class="sf3 '+lv+'" style="width:'+sc+'%"></div></div>'+
+      '<div class="rks">'+
+        '<div class="rki"><div class="rkil">Abn Ratio</div><div class="rkiv">'+(rpt.abnormal_ratio!=null?(rpt.abnormal_ratio*100).toFixed(1)+"%":"--")+'</div></div>'+
+        '<div class="rki"><div class="rkil">Min SpO2</div><div class="rkiv">'+(rpt.min_spo2!=null?fm(rpt.min_spo2,1)+"%":"--")+'</div></div>'+
+        '<div class="rki"><div class="rkil">Max HR</div><div class="rkiv">'+(rpt.max_heart_rate!=null?fm(rpt.max_heart_rate,0)+" bpm":"--")+'</div></div>'+
+        '<div class="rki"><div class="rkil">Trend</div><div class="rkiv">'+(rpt.vitals_trend||"--")+'</div></div>'+
+      '</div></div>';});
+  if(!cs.length){G("rg").innerHTML='<div class="empty"><div class="ei">&#9203;</div><p>Waiting for first Airflow batch run.</p></div>';}
+  else{G("rg").innerHTML=cs.join("");}
+}catch(e){er(G("rg"),"API unreachable: "+e.message);}}
+async function lh(){try{
+  const d=await fetch(API+"/health").then(r=>r.json());
+  G("hca").textContent="Checked "+ft(d.checked_at);
+  const st=Object.entries(d.stages||{});
+  G("sbh").innerHTML=st.map(([n,s])=>{
+    const c=s.stale||s.status!=="ok"?"err-r":"ok-r";
+    return '<div class="str '+c+'"><div style="display:flex;align-items:center;gap:.45rem"><div class="sdot"></div><span class="snm">'+n.replace(/_/g," ")+'</span></div><span class="sst">'+(s.stale?"stale":s.status)+'</span></div>';}).join("");
+  G("ht").innerHTML='<table><thead><tr><th>Stage</th><th>Status</th><th>Last Success</th><th>Age(s)</th><th>Stale</th><th>Detail</th></tr></thead><tbody>'+
+    st.map(([n,s])=>{
+      const ok=!s.stale&&s.status==="ok";
+      return '<tr><td><strong>'+n.replace(/_/g," ")+'</strong></td>'+
+        '<td><span style="font-size:.6rem;font-weight:700;padding:2px 7px;border-radius:999px;text-transform:uppercase;background:'+(ok?"rgba(34,197,94,.15)":"rgba(239,68,68,.15)")+';color:'+(ok?"var(--ok)":"var(--cr)")+'">'+s.status+'</span></td>'+
+        '<td style="color:var(--mu)">'+ft(s.last_success_at)+'</td>'+
+        '<td>'+(s.age_seconds!=null?s.age_seconds+"s":"--")+'</td>'+
+        '<td>'+(s.stale?'<span style="color:var(--cr);font-weight:600">Yes</span>':'<span style="color:var(--ok)">No</span>')+'</td>'+
+        '<td style="color:var(--mu);font-size:.72rem">'+(s.detail||"--")+'</td></tr>';}).join("")+
+  '</tbody></table>';
+}catch(e){er(G("ht"),"API unreachable: "+e.message);G("sbh").innerHTML='<div class="str err-r"><div style="display:flex;align-items:center;gap:.45rem"><div class="sdot"></div><span class="snm">unreachable</span></div></div>';}}
+async function refresh(){const ind=G("ind");ind.classList.add("dim");
+  try{
+    if(ap==="ward")await lw();
+    if(ap==="alerts")await la();
+    if(ap==="risk")await lr();
+    if(ap==="health")await lh();
+    if(ap!=="health")await lh().catch(()=>{});
+  }finally{ind.classList.remove("dim");G("lu").textContent="Updated "+new Date().toLocaleTimeString();}
+}
+refresh();setInterval(refresh,RM);
+</script>
+</body>
+</html>

@@ -154,6 +154,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-hospital}
       POSTGRES_USER: ${POSTGRES_USER:-hospital}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hospital_pw}
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: 300
+      AIRFLOW__WEBSERVER__WORKERS: 2
     volumes:
       - ./data/lab_drops:/data/lab_drops
       - ./data/parquet_lake:/data/parquet_lake

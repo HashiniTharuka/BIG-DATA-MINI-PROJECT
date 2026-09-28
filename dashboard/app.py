@@ -92,12 +92,19 @@ def get_conn():
 
 
 def run_query(sql: str, params: tuple = ()) -> pd.DataFrame:
-    conn = get_conn()
     try:
+        conn = get_conn()
+        if getattr(conn, "closed", 0) != 0:
+            st.cache_resource.clear()
+            conn = get_conn()
         return pd.read_sql(sql, conn, params=params)
-    except psycopg2.Error:
-        conn.rollback()
-        # Reconnect once on a broken connection (e.g. transient network blip).
+    except Exception:
+        try:
+            conn = get_conn()
+            if getattr(conn, "closed", 0) == 0:
+                conn.rollback()
+        except Exception:
+            pass
         st.cache_resource.clear()
         conn = get_conn()
         return pd.read_sql(sql, conn, params=params)

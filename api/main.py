@@ -17,11 +17,21 @@ from common.db import get_connection, dict_cursor  # noqa: E402
 from common.logging_config import get_logger, log_event  # noqa: E402
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
 logger = get_logger("api")
 
 app = FastAPI(title="Hospital Vitals Pipeline API", version="1.0.0")
+
+# Allow browser-based dashboards on any local port to call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 # Stages expected to report a heartbeat at roughly this cadence (seconds).
