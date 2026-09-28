@@ -23,13 +23,13 @@ groups:
           description: "The speed layer (vitals_realtime aggregation) appears stuck or crashed."
 
       - alert: HighAbnormalVitalsRate
-        expr: rate(spark_alerts_written_total[5m]) > 0.5
+        expr: rate(spark_alerts_written_total[5m]) > 5
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Abnormal vitals alert rate is unusually high"
-          description: "More than 0.5 threshold-breach alerts/sec sustained over 5 minutes across the ward — investigate for a systemic issue vs. isolated patient events."
+          description: "More than 5 threshold-breach alerts/sec sustained over 5 minutes across the ward — investigate for a systemic issue vs. isolated patient events."
 
       - alert: BatchJobOverdue
         expr: time() - lab_batch_last_drop_timestamp > 900
