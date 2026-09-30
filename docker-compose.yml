@@ -195,7 +195,7 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8501:8501"
+      - "8502:8501"
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432

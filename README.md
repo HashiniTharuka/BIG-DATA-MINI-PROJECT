@@ -60,7 +60,7 @@ its metadata DB). Give it ~2-3 minutes, then:
 
 | Service | URL | Notes |
 |---|---|---|
-| Streamlit dashboard (the consolidated report) | http://localhost:8501 | live ward view + daily risk report |
+| Dashboard (the consolidated report) | http://localhost:8502 | live ward view + daily risk report |
 | API | http://localhost:8000/docs | Swagger UI |
 | Airflow UI | http://localhost:8080 | run `docker compose logs airflow \| grep -i password` for the auto-generated admin password |
 | Grafana | http://localhost:3000 | admin/admin, or anonymous viewer access |
