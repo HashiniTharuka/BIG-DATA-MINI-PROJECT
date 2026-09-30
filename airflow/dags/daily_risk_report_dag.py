@@ -16,6 +16,13 @@ DAG:
 
 Schedule is derived from SIMULATED_DAY_SECONDS so the DAG cadence tracks
 whatever simulated-day compression the demo is using.
+
+Note on date alignment: the lab batch source names files by real calendar
+dates (today + day_index). The Spark Parquet archive partitions by the
+event_time of the actual readings, which only exist for days when Spark was
+running. When the exact partition is missing the DAG falls back to the
+closest available partition so that Min SpO2 / Max HR / Abn Ratio are
+always populated from real vitals data instead of showing '--'.
 """
 from __future__ import annotations
 
@@ -52,6 +59,8 @@ default_args = {
 def find_unprocessed_batch(**context) -> None:
     success_markers = sorted(glob.glob(os.path.join(LAB_DROP_DIR, "lab_results_*.json._SUCCESS")))
     if not success_markers:
+        # Write a heartbeat so the health table stays fresh even with nothing to do
+        upsert_health("airflow_dag", "ok", detail="airflow_dag checked: no lab files dropped yet")
         raise AirflowSkipException("No lab files dropped yet")
 
     with get_connection() as conn:
@@ -68,6 +77,8 @@ def find_unprocessed_batch(**context) -> None:
             context["ti"].xcom_push(key="lab_filepath", value=filepath)
             return
 
+    # All batches already reconciled — still write a heartbeat so health stays green
+    upsert_health("airflow_dag", "ok", detail="airflow_dag checked: all lab batches already reconciled")
     raise AirflowSkipException("All dropped lab files already reconciled")
 
 
@@ -108,13 +119,55 @@ def load_lab_results(**context) -> None:
     ti.xcom_push(key="lab_row_count", value=len(rows))
 
 
+def _find_best_parquet_partition(parquet_lake_path: str, batch_date: str) -> str | None:
+    """Return the Parquet partition path to use for vitals data.
+
+    Prefers the exact date partition. When that is missing (the lab batch
+    source uses real calendar dates that advance faster than Spark writes
+    new partitions), falls back to the closest available partition by date
+    so that Min SpO2 / Max HR are always populated from real data.
+    """
+    exact = os.path.join(parquet_lake_path, f"event_date={batch_date}")
+    if os.path.isdir(exact):
+        return exact
+
+    # Discover all available partitions
+    available = sorted(
+        d for d in glob.glob(os.path.join(parquet_lake_path, "event_date=*"))
+        if os.path.isdir(d)
+    )
+    if not available:
+        return None
+
+    # Pick the partition whose date is closest to batch_date
+    try:
+        target = datetime.strptime(batch_date, "%Y-%m-%d").date()
+    except ValueError:
+        return available[-1]  # last available as last resort
+
+    def _date_of(path: str):
+        try:
+            return datetime.strptime(os.path.basename(path).split("=")[1], "%Y-%m-%d").date()
+        except (IndexError, ValueError):
+            return None
+
+    dated = [(p, _date_of(p)) for p in available if _date_of(p) is not None]
+    if not dated:
+        return available[-1]
+
+    closest = min(dated, key=lambda x: abs((x[1] - target).days))
+    return closest[0]
+
+
 def compute_and_write_risk_report(**context) -> None:
     ti = context["ti"]
     batch_date = ti.xcom_pull(key="batch_date", task_ids="find_unprocessed_batch")
 
     # --- Recompute vitals trend for the day from the raw Parquet archive ---
-    day_path = os.path.join(PARQUET_LAKE_PATH, f"event_date={batch_date}")
-    if os.path.isdir(day_path):
+    # Use the exact date partition when available; fall back to the closest
+    # existing partition so Min SpO2 / Max HR are always populated.
+    day_path = _find_best_parquet_partition(PARQUET_LAKE_PATH, batch_date)
+    if day_path is not None:
         vitals_df = pd.read_parquet(day_path)
     else:
         vitals_df = pd.DataFrame(columns=["patient_id", "heart_rate", "spo2",
