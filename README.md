@@ -4,8 +4,7 @@ Applied Big Data Engineering — Mini Project. Use Case 2 (Hospital Patient Vita
 Monitoring), implemented as a **Lambda architecture**: a Kafka + Spark Structured
 Streaming speed layer for real-time ward monitoring, and an Airflow-orchestrated batch
 layer that reconciles daily lab results against recomputed vitals trends into a
-consolidated daily risk report. See [`report/REPORT.md`](report/REPORT.md) for the full
-architecture justification, stack rationale, and write-up.
+consolidated daily risk report.
 
 ## Architecture
 
@@ -28,7 +27,7 @@ Observability: structured JSON logs (all stages) + Prometheus (Pushgateway for
 producer/Spark/Airflow, native scrape for the API) + Alertmanager rules + Grafana
 ```
 
-Why Lambda and not Kappa, and why this stack: see `report/REPORT.md` — short version:
+Why Lambda and not Kappa, and why this stack — short version:
 the two sources have genuinely different cadences (continuous sensor stream vs. an
 inherently-daily lab extract), so the batch layer recomputes from an immutable raw
 Parquet archive rather than replaying the Kafka log, which is what distinguishes Lambda
@@ -97,21 +96,20 @@ python -m pytest
 ## Repository layout
 
 ```
-common/       shared code: DB helper, schema, structured logging, Prometheus push
-              helper, and the two pure business-logic modules (vitals_rules.py,
-              risk_scoring.py) that the unit tests exercise directly.
-sources/      simulated data sources (vitals_producer.py, lab_batch_source.py)
-streaming/    Spark Structured Streaming speed-layer job
-airflow/      Airflow DAG for the batch layer
-api/          FastAPI serving layer
-dashboard/    Streamlit consolidated report/dashboard
+common/        shared code: DB helper, schema, structured logging, Prometheus push
+               helper, and the two pure business-logic modules (vitals_rules.py,
+               risk_scoring.py) that the unit tests exercise directly.
+sources/       simulated data sources (vitals_producer.py, lab_batch_source.py)
+streaming/     Spark Structured Streaming speed-layer job
+airflow/       Airflow DAG for the batch layer
+api/           FastAPI serving layer
+dashboard/     Streamlit consolidated report/dashboard
 observability/ Prometheus, Alertmanager, Grafana configs
-tests/        pytest unit tests for common/risk_scoring.py and common/vitals_rules.py
-report/       REPORT.md — the written report draft
-data/         bind-mounted volumes: lab file drop zone, Parquet data lake, Spark checkpoints
+tests/         pytest unit tests for common/risk_scoring.py and common/vitals_rules.py
+data/          bind-mounted volumes: lab file drop zone, Parquet data lake, Spark checkpoints
 ```
 
-## Known limitations (see report for the full discussion)
+## Known limitations
 
 - Airflow runs in `airflow standalone` mode (SQLite + SequentialExecutor) for
   simplicity — a production deployment would use CeleryExecutor with a dedicated
